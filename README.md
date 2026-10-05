@@ -8,7 +8,35 @@ Azure Linux VM. It implements the
 and ships as `ghcr.io/captf-io/azure-machine`. Control-plane and worker
 machines share it; `control_plane` picks the subnet, identity, security
 groups and load balancer registration. The reasons behind every choice are
-in [DESIGN.md](DESIGN.md).
+in [DESIGN.md](https://github.com/captf-io/terraform-azure-machine/blob/main/DESIGN.md).
+
+## Usage
+
+CAPTF runs this module from the module image `ghcr.io/captf-io/azure-machine`: set the image on
+a `TerraformMachine`'s `spec.source.image` (through a `TerraformMachineTemplate`), and the controller renders every
+input. The module is also published to the Terraform Registry as
+`captf-io/machine/azure` and can be called directly:
+
+```hcl
+module "machine" {
+  source  = "captf-io/machine/azure"
+  version = "~> 0.1"
+
+  # The contract inputs the controller would render (captf_contract,
+  # captf_cluster, captf_object, captf_tags, ...; see Inputs), and any
+  # user variables.
+}
+```
+
+Called directly, the module is a CAPTF root module first:
+
+- it configures its own `provider "azurerm"` block, so the calling
+  module cannot use `count`, `for_each` or `depends_on` on it, and the
+  provider takes its credentials from the environment (see Identity
+  Secret);
+- its providers are pinned to exact versions (`versions.tf`), which the
+  calling configuration has to accept;
+- you set the `captf_*` inputs yourself.
 
 ## What it creates
 
@@ -196,7 +224,7 @@ The first apply therefore reports `pending`; the controller's next refresh,
 
 `tfcapi-lint module --strict` passes without allowed warnings.
 `hack/check-tags.sh` exempts nothing. One trivy finding is ignored with its
-reason in [`.trivyignore.yaml`](.trivyignore.yaml): AZU-0068 on the NIC,
+reason in [`.trivyignore.yaml`](https://github.com/captf-io/terraform-azure-machine/blob/main/.trivyignore.yaml): AZU-0068 on the NIC,
 whose security group is attached by
 `node_security_group_association.tf`. The tests cannot cover the
 `terminated` reading (`VirtualMachineNotFound`): a mock provider never drops
@@ -204,7 +232,7 @@ a resource on refresh.
 
 ## Examples
 
-[`examples/cluster-kubeadm.yaml`](examples/cluster-kubeadm.yaml) uses this
+[`examples/cluster-kubeadm.yaml`](https://github.com/captf-io/terraform-azure-machine/blob/main/examples/cluster-kubeadm.yaml) uses this
 role for the control plane and a MachineDeployment. A worker template:
 
 ```yaml
