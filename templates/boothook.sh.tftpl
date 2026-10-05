@@ -1,0 +1,81 @@
+#!/bin/sh
+# CAPTF Azure machine module boothook. cloud-init runs it early on every
+# boot, before the bootstrap data's own cloud-config
+# (https://cloudinit.readthedocs.io/en/latest/reference/user_data_formats.html).
+# It only writes files and starts a service, so running it again is safe.
+set -eu
+
+# cloud-provider-azure and the Azure Disk CSI driver read this file. It names
+# the node's managed identity and holds no secret
+# (https://cloud-provider-azure.sigs.k8s.io/install/configs/). Written only
+# when absent: on the first boot the bootstrap data's own write_files runs
+# later and wins, and on later boots that file is kept.
+if [ ! -e /etc/kubernetes/azure.json ]; then
+  install -d -m 0755 /etc/kubernetes
+  cat > /etc/kubernetes/azure.json <<'CAPTF_EOF'
+${cloud_provider_config}
+CAPTF_EOF
+  chmod 0644 /etc/kubernetes/azure.json
+fi
+%{ if apiserver_hairpin ~}
+
+# API server hairpin workaround (DESIGN.md decision 2). An Azure internal
+# load balancer drops a backend's flow to its own frontend when it maps the
+# flow back to that backend
+# (https://learn.microsoft.com/azure/load-balancer/load-balancer-troubleshoot-backend-traffic).
+# kubeadm and the kubelet reach the API server through the endpoint, so
+# while the local API server is ready this node sends its own endpoint
+# traffic to it directly (and, with RKE2, its supervisor traffic too);
+# otherwise the load balancer takes it to another control-plane node, since
+# this node's probe is down too.
+cat > /usr/local/sbin/captf-apiserver-hairpin <<'CAPTF_EOF'
+#!/bin/bash
+set -u
+frontend_ip='${frontend_ip}'
+frontend_port='${frontend_port}'
+backend_port='${backend_port}'
+# 0 without RKE2. RKE2 may run the API server without anonymous auth, so an
+# answer of 401 or 403 also counts as up there.
+supervisor_port='${supervisor_port}'
+chain=CAPTF-APISERVER-HAIRPIN
+while true; do
+  # The address the API server advertises: this node's address on the
+  # route to the frontend.
+  node_ip=$(ip -4 -o route get "$frontend_ip" 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+  iptables -w -t nat -N "$chain" 2>/dev/null || true
+  iptables -w -t nat -C OUTPUT -j "$chain" 2>/dev/null || iptables -w -t nat -I OUTPUT -j "$chain"
+  code=
+  if [ -n "$node_ip" ]; then
+    code=$(curl -sk --max-time 2 -o /dev/null -w '%%{http_code}' "https://$node_ip:$backend_port/readyz" || true)
+  fi
+  up=false
+  case "$code" in
+    200) up=true ;;
+    401 | 403) [ "$supervisor_port" = 0 ] || up=true ;;
+  esac
+  if [ "$up" = true ]; then
+    rule="-d $frontend_ip/32 -p tcp --dport $frontend_port -j DNAT --to-destination $node_ip:$backend_port"
+    supervisor_rule="-d $frontend_ip/32 -p tcp --dport $supervisor_port -j DNAT --to-destination $node_ip:$supervisor_port"
+    # shellcheck disable=SC2086 # $rule is a list of iptables arguments.
+    if ! iptables -w -t nat -C "$chain" $rule 2>/dev/null ||
+      { [ "$supervisor_port" != 0 ] && ! iptables -w -t nat -C "$chain" $supervisor_rule 2>/dev/null; }; then
+      iptables -w -t nat -F "$chain"
+      # shellcheck disable=SC2086
+      iptables -w -t nat -A "$chain" $rule
+      # shellcheck disable=SC2086
+      [ "$supervisor_port" = 0 ] || iptables -w -t nat -A "$chain" $supervisor_rule
+    fi
+  else
+    iptables -w -t nat -F "$chain"
+  fi
+  sleep 5
+done
+CAPTF_EOF
+chmod 0755 /usr/local/sbin/captf-apiserver-hairpin
+# A transient unit needs no daemon-reload. --no-block: cloud-init runs before
+# the boot transaction a blocking start would wait for.
+systemd-run --no-block --unit=captf-apiserver-hairpin \
+  --description="CAPTF API server hairpin workaround" \
+  --property=Restart=always --property=RestartSec=5 \
+  /usr/local/sbin/captf-apiserver-hairpin || true
+%{ endif ~}
