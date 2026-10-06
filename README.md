@@ -129,7 +129,7 @@ TerraformMachineTemplate:
 | --- | --- | --- | --- |
 | `accelerated_networking` | `bool` | `true` | Accelerated networking on the NIC; turn it off for a `vm_size` without it |
 | `additional_tags` | `map(string)` | `{}` | Extra Azure tags on the VM and NIC. Keys starting with `captf.io_` or `captf.io/` are rejected; at most 44 |
-| `boot_diagnostics` | `bool` | `true` | Serial console log in Azure-managed storage. It shows boot output, which may include kubeadm's join command |
+| `boot_diagnostics` | `bool` | `false` | Serial console log in Azure-managed storage, for debugging a node that never joins. It shows boot output, which may include kubeadm's join command, so it is off by default |
 | `encryption_at_host` | `bool` | `false` | Encrypt temporary disks and caches on the host; needs the `EncryptionAtHost` feature on the subscription. Managed disks are encrypted at rest either way |
 | `external_cluster_exports` | `any` | `null` | Exports (schema `captf.io/azure-cluster/v1`) for an externally managed TerraformCluster |
 | `image_id` | `string` | `null` (required) | Managed image, Compute Gallery image (version), or community or shared gallery image (version) ID. `{version}` and `{semver}` become the Machine's version, `v1.31.4` and `1.31.4`, without any `+suffix` |
@@ -248,6 +248,8 @@ The first apply therefore reports `pending`; the controller's next refresh,
 - No public IP; nodes reach the internet through the subnet's egress.
 - A Spot VM is deallocated, not deleted, on eviction: it reports `stopped`
   and a MachineHealthCheck replaces it.
+- No customer-managed key for the OS disk: there is no disk encryption set
+  variable, so the disk is encrypted at rest with a platform-managed key.
 - Azure public cloud only.
 - Kubernetes images for `{semver}` must exist in the gallery for every
   version you roll to.
@@ -261,6 +263,23 @@ whose security group is attached by
 `node_security_group_association.tf`. The tests cannot cover the
 `terminated` reading (`VirtualMachineNotFound`): a mock provider never drops
 a resource on refresh.
+
+Two deliberate deviations from the "defaults are secure" rule
+(CONVENTIONS.md section 8):
+
+- **`encryption_at_host` defaults to `false`.** Turning it on needs the
+  `EncryptionAtHost` feature registered on the subscription, and a VM
+  create fails without it, so a secure default would break every first
+  apply. Managed disks are encrypted at rest either way; set it to `true`
+  once the feature is registered.
+- **The bootstrap payload travels as `custom_data`.** On a control-plane
+  node it holds the cluster CA keys and other secrets that CABPK or CAPRKE2
+  generate. Azure offers no other channel that cloud-init reads at first
+  boot (user data is readable by every process on the node through the
+  instance metadata service), so the payload is stored, sensitive, in the
+  Terraform state Secret and sits on the node's disk
+  (`/var/lib/cloud`) for as long as the node lives. Protect read access to
+  that Secret like the CA keys themselves.
 
 ## Examples
 

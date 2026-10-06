@@ -157,6 +157,18 @@ sha256). Scale set instances:
   made valid, password authentication off, extension operations off,
   optional trusted launch (secure boot, vTPM), optional encryption at host,
   boot diagnostics, user-assigned identity.
+- Boot diagnostics are off by default. The first draft turned them on for
+  debugging, but the serial console log shows boot output, which may include
+  kubeadm's join command, and CONVENTIONS.md section 8 makes defaults
+  secure. `boot_diagnostics = true` opts in while debugging a node that
+  never joins.
+- `encryption_at_host` stays off by default, a recorded exception: the
+  `EncryptionAtHost` feature must be registered on the subscription or the
+  create fails. The control-plane bootstrap payload (cluster CA keys) is
+  `custom_data`, so it lives in state and on the node; user data is worse
+  (readable through the metadata service). Both are listed under README
+  "Exceptions". There is no OS-disk customer-managed key variable (README
+  "Limitations").
 - Trusted launch is off by default, a change from the first draft: CAPZ
   says its reference images do not support it ("Trusted launch supported
   OS images are not included in the list of `capi` reference images",

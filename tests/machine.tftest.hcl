@@ -179,8 +179,8 @@ run "happy_path" {
     error_message = "A control-plane NIC joins the control-plane security group and application security group."
   }
   assert {
-    condition     = azurerm_linux_virtual_machine.node_virtual_machine[0].availability_set_id == null && length(azurerm_linux_virtual_machine.node_virtual_machine[0].boot_diagnostics) == 1
-    error_message = "A zonal VM has no availability set; boot diagnostics are on."
+    condition     = azurerm_linux_virtual_machine.node_virtual_machine[0].availability_set_id == null && length(azurerm_linux_virtual_machine.node_virtual_machine[0].boot_diagnostics) == 0
+    error_message = "A zonal VM has no availability set; boot diagnostics are off by default."
   }
 }
 
@@ -425,6 +425,17 @@ run "unknown_failure_domain" {
   }
 
   expect_failures = [azurerm_linux_virtual_machine.node_virtual_machine]
+}
+
+run "boot_diagnostics_opt_in" {
+  variables {
+    boot_diagnostics = true
+  }
+
+  assert {
+    condition     = length(azurerm_linux_virtual_machine.node_virtual_machine[0].boot_diagnostics) == 1
+    error_message = "boot_diagnostics = true turns the serial console log on."
+  }
 }
 
 run "spot_is_interruptible" {

@@ -47,9 +47,9 @@ variable "additional_tags" {
 }
 
 variable "boot_diagnostics" {
-  description = "Keep the serial console log in Azure-managed storage, for debugging a node that never joins. The log shows boot output, which may include kubeadm's join command."
+  description = "Keep the serial console log in Azure-managed storage, for debugging a node that never joins. The log shows boot output, which may include kubeadm's join command. Off by default for that reason."
   type        = bool
-  default     = true
+  default     = false
   nullable    = false
 }
 
