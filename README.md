@@ -32,9 +32,9 @@ The CAPTF Azure machine module is the Terraform/OpenTofu root module behind
 `TerraformMachine`. It is the `machine` role of the CAPTF Azure modules: one
 Kubernetes node on one Azure Linux VM. It implements the
 [`v1alpha1` machine role](https://captf.io/docs/module-author/contract/v1alpha1/machine.html).
-The images are built from
-[azure-modules](https://github.com/captf-io/azure-modules) and published as
-`ghcr.io/captf-io/azure-machine`.
+The images are built by
+[module-images](https://github.com/captf-io/module-images) from this repository's releases and published as
+`ghcr.io/captf-io/module-images/azure-machine`.
 
 Control-plane and worker machines share it; `control_plane` picks the subnet,
 identity, security groups and load balancer registration. The reasons behind
@@ -43,7 +43,7 @@ every choice are in
 
 ## Using it
 
-CAPTF runs this module from the module image `ghcr.io/captf-io/azure-machine`:
+CAPTF runs this module from the module image `ghcr.io/captf-io/module-images/azure-machine`:
 set the image on a `TerraformMachine`'s `spec.source.image` (through a
 `TerraformMachineTemplate`), and the controller renders every input. The module
 is also published to the Terraform Registry as `captf-io/machine/azure` and can
@@ -276,7 +276,7 @@ spec:
   template:
     spec:
       source:
-        image: ghcr.io/captf-io/azure-machine:v0.1.0-opentofu
+        image: ghcr.io/captf-io/module-images/azure-machine:v0.1.0-opentofu
       variables:
         image_id: /communityGalleries/ClusterAPI-f72ceb4f-5159-4c26-a0fe-2ea738f0d019/images/capi-ubun2-2404/versions/{semver}
         vm_size: Standard_D8s_v5
@@ -311,7 +311,7 @@ gate. Targets (`make help` lists them):
 - `clean`: remove `build/`.
 
 This repository holds the code only; it builds no images. The module images
-are built from it by [azure-modules](https://github.com/captf-io/azure-modules).
+are built from its releases by [module-images](https://github.com/captf-io/module-images).
 
 <br>
 <p align="center">
